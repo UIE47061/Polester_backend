@@ -35,8 +35,8 @@ class ImageGenerationService:
                 print("警告: GEMINI_API_KEY 未設定，無法翻譯中文提示詞")
                 return text
             
-            # 使用 REST API 方式調用 Gemini
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={env.GEMINI_API_KEY}"
+            # 使用 REST API 方式調用 Gemini (使用最新的 gemini-2.5-flash 模型)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={env.GEMINI_API_KEY}"
             
             headers = {
                 "Content-Type": "application/json"
