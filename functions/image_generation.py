@@ -1,7 +1,13 @@
 import requests
 import base64
+import re
 from util.config import env
 from typing import Optional, Dict
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
 
 
 class ImageGenerationService:
@@ -15,6 +21,44 @@ class ImageGenerationService:
     }
     
     DEFAULT_MODEL = "flux-schnell"
+    
+    @staticmethod
+    def _contains_chinese(text: str) -> bool:
+        """檢查文字是否包含中文字元"""
+        return bool(re.search(r'[\u4e00-\u9fff]', text))
+    
+    @staticmethod
+    def _translate_to_english(text: str) -> str:
+        """將中文翻譯成英文"""
+        try:
+            if not GEMINI_AVAILABLE:
+                return text
+            
+            if not env.GEMINI_API_KEY:
+                print("警告: GEMINI_API_KEY 未設定，無法翻譯中文提示詞")
+                return text
+            
+            # 設定 Gemini API
+            genai.configure(api_key=env.GEMINI_API_KEY)
+            model = genai.GenerativeModel('gemini-pro')
+            
+            # 翻譯提示詞
+            prompt = f"""請將以下中文文字翻譯成英文，用於 AI 圖片生成。
+                    只需要回傳翻譯結果，不要有其他說明文字。
+                    保持描述的細節和風格。
+
+                    中文: {text}
+                    英文:"""
+            
+            response = model.generate_content(prompt)
+            translated = response.text.strip()
+            
+            print(f"翻譯: {text} -> {translated}")
+            return translated
+            
+        except Exception as e:
+            print(f"翻譯失敗: {e}，使用原始提示詞")
+            return text
     
     @staticmethod
     def generate_image(
@@ -41,6 +85,15 @@ class ImageGenerationService:
                     "data": None,
                     "message": "HUGGINGFACE_TOKEN 環境變數未設定"
                 }
+            
+            # 檢查並翻譯中文提示詞
+            original_prompt = prompt
+            if ImageGenerationService._contains_chinese(prompt):
+                prompt = ImageGenerationService._translate_to_english(prompt)
+            
+            # 翻譯負面提示詞（如果有）
+            if negative_prompt and ImageGenerationService._contains_chinese(negative_prompt):
+                negative_prompt = ImageGenerationService._translate_to_english(negative_prompt)
             
             # 獲取模型 URL
             model_id = ImageGenerationService.MODELS.get(model)
@@ -81,7 +134,8 @@ class ImageGenerationService:
                         "image_bytes": image_bytes,
                         "size": len(image_bytes),
                         "model": model,
-                        "prompt": prompt
+                        "prompt": prompt,
+                        "original_prompt": original_prompt
                     },
                     "message": "圖片生成成功"
                 }

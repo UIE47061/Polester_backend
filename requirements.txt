@@ -5,3 +5,4 @@ python-multipart
 supabase
 pillow
 requests
+google-generativeai
