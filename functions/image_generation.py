@@ -19,7 +19,7 @@ class ImageGenerationService:
         "sdxl": "stabilityai/stable-diffusion-xl-base-1.0",  # 高品質
         "sd-1.5": "runwayml/stable-diffusion-v1-5"  # 經典
     }
-    
+
     DEFAULT_MODEL = "flux-schnell"
     
     @staticmethod
@@ -40,7 +40,7 @@ class ImageGenerationService:
             
             # 設定 Gemini API
             genai.configure(api_key=env.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
             # 翻譯提示詞
             prompt = f"""請將以下中文文字翻譯成英文，用於 AI 圖片生成。
