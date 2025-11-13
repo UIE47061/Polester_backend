@@ -31,36 +31,44 @@ class ImageGenerationService:
     def _translate_to_english(text: str) -> str:
         """將中文翻譯成英文"""
         try:
-            if not GEMINI_AVAILABLE:
-                return text
-            
             if not env.GEMINI_API_KEY:
                 print("警告: GEMINI_API_KEY 未設定，無法翻譯中文提示詞")
                 return text
             
-            # 設定 Gemini API
-            genai.configure(api_key=env.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # 使用 REST API 方式調用 Gemini
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={env.GEMINI_API_KEY}"
             
-            # 翻譯提示詞
-            prompt = f"""請將以下中文文字翻譯成英文，用於 AI 圖片生成。
-                    只需要回傳翻譯結果，不要有其他說明文字。
-                    保持描述的細節和風格。
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "contents": [{
+                    "parts": [{
+                        "text": f"""請將以下中文文字翻譯成英文，用於 AI 圖片生成。
+                            只需要回傳翻譯結果，不要有其他說明文字。
+                            保持描述的細節和風格。
 
-                    中文: {text}
-                    英文:"""
+                            中文: {text}
+                            英文:"""
+                    }]
+                }]
+            }
             
-            response = model.generate_content(prompt)
-            translated = response.text.strip()
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
             
-            print(f"翻譯: {text} -> {translated}")
-            return translated
+            if response.status_code == 200:
+                result = response.json()
+                translated = result['candidates'][0]['content']['parts'][0]['text'].strip()
+                print(f"翻譯: {text} -> {translated}")
+                return translated
+            else:
+                print(f"翻譯 API 錯誤: {response.status_code} - {response.text}")
+                return text
             
         except Exception as e:
             print(f"翻譯失敗: {e}，使用原始提示詞")
-            return text
-    
-    @staticmethod
+            return text    @staticmethod
     def generate_image(
         prompt: str,
         model: str = DEFAULT_MODEL,
