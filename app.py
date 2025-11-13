@@ -14,6 +14,7 @@ import secrets
 #     chat as chat_router,
 #     favorites as favorites_router
 # )
+from router import advertisements as advertisement_router
 
 # 初始化 HTTPBasic 認證
 security = HTTPBasic()
@@ -82,6 +83,9 @@ def root():
 def health_check():
     """健康檢查，喚醒 API 用"""
     return {"status": "ok"}
+
+# 註冊路由
+app.include_router(advertisement_router.router)
 
 # FastAPI 初始化
 if __name__ == '__main__':
