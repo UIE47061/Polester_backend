@@ -2,19 +2,29 @@ from supabase import create_client, Client
 from util.config import env
 from typing import Optional
 from datetime import datetime
-import base64
 import uuid
-
-# 初始化 Supabase 客戶端
-supabase: Client = create_client(env.SUPABASE_URL, env.SUPABASE_KEY)
 
 # 儲存桶名稱
 STORAGE_BUCKET = "advertisements"
+
+# Supabase 客戶端（延遲初始化）
+_supabase_client: Optional[Client] = None
+
+
+def get_supabase_client() -> Client:
+    """獲取 Supabase 客戶端（延遲初始化）"""
+    global _supabase_client
+    if _supabase_client is None:
+        if not env.SUPABASE_URL or not env.SUPABASE_KEY:
+            raise ValueError("SUPABASE_URL 和 SUPABASE_KEY 環境變數必須設定")
+        _supabase_client = create_client(env.SUPABASE_URL, env.SUPABASE_KEY)
+    return _supabase_client
 
 
 def ensure_bucket_exists():
     """確保 Storage Bucket 存在，如果不存在則建立"""
     try:
+        supabase = get_supabase_client()
         # 嘗試列出所有桶
         buckets = supabase.storage.list_buckets()
         bucket_names = [bucket.name for bucket in buckets]
@@ -59,6 +69,8 @@ class AdvertisementService:
         try:
             # 確保儲存桶存在
             ensure_bucket_exists()
+            
+            supabase = get_supabase_client()
             
             # 生成唯一的檔案名稱
             file_extension = image_filename.split('.')[-1]
@@ -115,6 +127,7 @@ class AdvertisementService:
             廣告資料
         """
         try:
+            supabase = get_supabase_client()
             response = supabase.table("advertisements").select("*").eq("id", ad_id).execute()
             
             if not response.data:
@@ -155,6 +168,7 @@ class AdvertisementService:
             廣告列表
         """
         try:
+            supabase = get_supabase_client()
             query = supabase.table("advertisements").select("*")
             
             if status:
@@ -187,6 +201,7 @@ class AdvertisementService:
         try:
             current_time = datetime.now().isoformat()
             
+            supabase = get_supabase_client()
             response = (
                 supabase.table("advertisements")
                 .select("*")
@@ -262,6 +277,7 @@ class AdvertisementService:
             
             update_data["updated_at"] = datetime.now().isoformat()
             
+            supabase = get_supabase_client()
             response = (
                 supabase.table("advertisements")
                 .update(update_data)
@@ -319,6 +335,7 @@ class AdvertisementService:
             if new_impressions >= impression_count:
                 update_data["status"] = "completed"
             
+            supabase = get_supabase_client()
             response = (
                 supabase.table("advertisements")
                 .update(update_data)
@@ -359,6 +376,8 @@ class AdvertisementService:
             
             ad_data = ad_response["data"]
             image_path = ad_data.get("image_path")
+            
+            supabase = get_supabase_client()
             
             # 從 Storage 刪除圖片
             if image_path:
