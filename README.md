@@ -1,24 +1,26 @@
 # Polester Backend API
 
-Polester 後端 API 服務，提供廣告刊登與管理功能。
+Polester 後端 API 服務，提供廣告刊登、管理與 AI 圖片生成功能。
 
 ## 📋 專案簡介
 
-這是一個基於 FastAPI 開發的後端 API 服務，整合 Supabase 作為資料庫與檔案儲存解決方案。主要功能包括廣告的建立、查詢、更新、刪除以及曝光追蹤。
+這是一個基於 FastAPI 開發的後端 API 服務，整合 Supabase 作為資料庫與檔案儲存解決方案，並串接 Hugging Face AI 模型提供圖片生成功能。主要功能包括廣告的建立、查詢、更新、刪除、曝光追蹤，以及 AI 輔助生成廣告圖片。
 
 ### 主要功能
 
+- 🎨 **AI 圖片生成** - 使用 Hugging Face 模型生成廣告圖片
 - 📸 **廣告圖片上傳** - 支援圖片上傳至 Supabase Storage
 - 📝 **廣告資訊管理** - 完整的 CRUD 操作
 - ⏰ **時段控制** - 設定廣告投放的開始與結束時間
 - 📊 **曝光追蹤** - 記錄與統計廣告曝光次數
-- 🎯 **智能篩選** - 自動篩選有效廣告（時段內且未達曝光上限）
+- 🎯 **智能篩選** - 自動篩選有效廣告
 
 ## 🛠️ 技術架構
 
 - **框架**: FastAPI
 - **資料庫**: Supabase (PostgreSQL)
 - **檔案儲存**: Supabase Storage
+- **AI 模型**: Hugging Face (FLUX.1, Stable Diffusion)
 - **伺服器**: Uvicorn
 - **環境管理**: python-dotenv
 
@@ -32,7 +34,8 @@ Polester_backend/
 ├── util/
 │   └── config.py      # 環境變數管理
 ├── functions/
-│   └── advertisements.py  # 廣告業務邏輯
+│   ├── advertisements.py    # 廣告業務邏輯
+│   └── image_generation.py  # AI 圖片生成服務
 └── router/
     └── advertisements.py  # 廣告 API 路由
 ```
@@ -59,6 +62,9 @@ pip install -r requirements.txt
 SUPABASE_URL=你的_supabase_專案_url
 SUPABASE_KEY=你的_supabase_service_role_key
 
+# Hugging Face 設定（用於 AI 圖片生成）
+HUGGINGFACE_TOKEN=hf_xxxxxxxxxxxxxxxxxx
+
 # API 文件認證
 DOCS_USERNAME=admin
 DOCS_PASSWORD=your_password
@@ -67,6 +73,12 @@ DOCS_PASSWORD=your_password
 PORT=7860
 RELOAD=true
 ```
+
+**取得 Hugging Face Token**:
+1. 註冊 https://huggingface.co/
+2. 前往 Settings → Access Tokens
+3. 建立新的 token（選擇 **Read** 權限即可）
+4. 複製 token 並加入 `.env`
 
 ### 4. Supabase 資料庫設定
 
@@ -120,7 +132,124 @@ http://localhost:7860
 
 ### API 端點
 
-#### 1. 建立廣告
+#### 1. AI 生成廣告圖片（預覽）
+
+**POST** `/advertisements/generate-image`
+
+使用 AI 生成廣告圖片，返回 base64 編碼的圖片供前端預覽。
+
+**請求 Body**:
+
+```json
+{
+    "prompt": "a beautiful sunset over the ocean, professional photography",
+    "model": "flux-schnell",
+    "negative_prompt": "low quality, blurry"
+}
+```
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| prompt | String | ✅ | 圖片描述提示詞（1-1000字） |
+| model | String | ❌ | 模型選擇（預設: flux-schnell） |
+| negative_prompt | String | ❌ | 負面提示詞（避免生成的內容） |
+
+**可用模型**:
+- `flux-schnell` (推薦) - 速度快，品質優秀
+- `sdxl` - 高品質 Stable Diffusion XL
+- `sd-1.5` - 經典 Stable Diffusion 1.5
+
+**範例**:
+
+```javascript
+const response = await fetch('http://localhost:7860/advertisements/generate-image', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        prompt: '一個美麗的海灘日落，專業攝影',
+        model: 'flux-schnell'
+    })
+});
+
+const result = await response.json();
+// 顯示預覽
+const img = document.createElement('img');
+img.src = `data:image/png;base64,${result.data.image_base64}`;
+document.body.appendChild(img);
+```
+
+**回應**:
+
+```json
+{
+    "success": true,
+    "message": "圖片生成成功",
+    "data": {
+        "image_base64": "iVBORw0KGgoAAAANSUhEUgAA...",
+        "size": 96504,
+        "model": "flux-schnell",
+        "prompt": "一個美麗的海灘日落，專業攝影"
+    }
+}
+```
+
+**使用流程**:
+1. 前端呼叫此 API 生成圖片預覽
+2. 使用者確認圖片後，將 base64 轉為 File
+3. 使用下方「建立廣告」API 上傳確認的圖片
+
+```javascript
+// 將 base64 轉為 File
+const blob = await fetch(`data:image/png;base64,${base64}`).then(r => r.blob());
+const file = new File([blob], 'generated-ad.png', {type: 'image/png'});
+
+// 上傳建立廣告（使用下方 API）
+const formData = new FormData();
+formData.append('image', file);
+// ... 其他參數
+```
+
+#### 2. 獲取可用的 AI 模型
+
+**GET** `/advertisements/models`
+
+獲取所有支援的 AI 圖片生成模型列表。
+
+**範例**:
+
+```javascript
+const response = await fetch('http://localhost:7860/advertisements/models');
+const result = await response.json();
+```
+
+**回應**:
+
+```json
+{
+    "success": true,
+    "data": {
+        "models": [
+            {
+                "id": "flux-schnell",
+                "name": "FLUX.1 Schnell",
+                "description": "速度快，品質優秀，推薦使用",
+                "recommended": true
+            },
+            {
+                "id": "sdxl",
+                "name": "Stable Diffusion XL",
+                "description": "高品質圖片生成",
+                "recommended": false
+            }
+        ],
+        "default": "flux-schnell"
+    }
+}
+```
+
+#### 3. 建立廣告
 
 **POST** `/advertisements/`
 
@@ -175,7 +304,7 @@ console.log(result);
 }
 ```
 
-#### 2. 獲取廣告列表
+#### 4. 獲取廣告列表
 
 **GET** `/advertisements/`
 
@@ -195,14 +324,11 @@ const response = await fetch('http://localhost:7860/advertisements/?status=activ
 const result = await response.json();
 ```
 
-#### 3. 獲取有效廣告
+#### 5. 獲取有效廣告
 
 **GET** `/advertisements/active`
 
-返回符合以下條件的廣告：
-- 狀態為 `active`
-- 當前時間在投放時段內
-- 曝光次數未達到目標
+返回所有狀態為 `active` 的廣告。
 
 **範例**:
 
@@ -211,7 +337,7 @@ const response = await fetch('http://localhost:7860/advertisements/active');
 const result = await response.json();
 ```
 
-#### 4. 獲取單一廣告
+#### 6. 獲取單一廣告
 
 **GET** `/advertisements/{ad_id}`
 
@@ -222,7 +348,7 @@ const response = await fetch('http://localhost:7860/advertisements/1');
 const result = await response.json();
 ```
 
-#### 5. 更新廣告
+#### 7. 更新廣告
 
 **PATCH** `/advertisements/{ad_id}`
 
@@ -254,7 +380,7 @@ const response = await fetch('http://localhost:7860/advertisements/1', {
 });
 ```
 
-#### 6. 增加曝光次數
+#### 8. 增加曝光次數
 
 **POST** `/advertisements/{ad_id}/impression`
 
@@ -268,7 +394,7 @@ const response = await fetch('http://localhost:7860/advertisements/1/impression'
 });
 ```
 
-#### 7. 刪除廣告
+#### 9. 刪除廣告
 
 **DELETE** `/advertisements/{ad_id}`
 
@@ -294,27 +420,3 @@ const response = await fetch('http://localhost:7860/advertisements/1', {
 
 訪問 `/docs` 或 `/redoc` 時需要提供帳號密碼：
 - 帳號密碼在 `.env` 中的 `DOCS_USERNAME` 和 `DOCS_PASSWORD` 設定
-
-## 🐛 常見問題
-
-### 1. Bucket not found 錯誤
-
-如果遇到儲存桶不存在的錯誤，請確認：
-- 使用的是 **Service Role Key**，而非 Anon Key
-- Supabase Storage 功能已啟用
-- 程式會在首次上傳時自動建立儲存桶
-
-### 2. 圖片上傳失敗
-
-檢查事項：
-- 圖片大小是否超過 10MB
-- 檔案格式是否為圖片類型
-- Supabase Storage 配額是否已滿
-
-### 3. 時間格式錯誤
-
-時間格式必須符合 ISO 8601 標準：
-- 正確: `2024-01-01T00:00:00`
-- 正確: `2024-01-01T00:00:00Z`
-- 正確: `2024-01-01T00:00:00+08:00`
-

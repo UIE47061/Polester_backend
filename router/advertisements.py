@@ -1,8 +1,9 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Body
 from fastapi.responses import JSONResponse
 from typing import Optional
 from datetime import datetime
 from functions.advertisements import AdvertisementService
+from functions.image_generation import ImageGenerationService
 from pydantic import BaseModel, Field
 
 router = APIRouter(
@@ -38,7 +39,71 @@ class AdvertisementUpdateRequest(BaseModel):
     status: Optional[str] = Field(None, description="廣告狀態 (active, paused, completed)")
 
 
+class ImageGenerationRequest(BaseModel):
+    """圖片生成請求模型"""
+    prompt: str = Field(..., description="圖片描述提示詞", min_length=1, max_length=1000)
+    model: Optional[str] = Field("flux-schnell", description="使用的模型 (flux-schnell, sdxl, sd-1.5)")
+    negative_prompt: Optional[str] = Field(None, description="負面提示詞（避免生成的內容）")
+
+
 # ===== API 端點 =====
+
+@router.post("/generate-image", summary="生成廣告圖片預覽", response_model=dict)
+async def generate_image(request: ImageGenerationRequest = Body(...)):
+    """
+    使用 AI 生成廣告圖片（僅預覽，不儲存）
+    
+    - **prompt**: 圖片描述提示詞（例如：「一個美麗的海灘日落，專業攝影」）
+    - **model**: 使用的模型，可選：
+        - `flux-schnell` (推薦) - 速度快，品質優秀
+        - `sdxl` - 高品質
+        - `sd-1.5` - 經典模型
+    - **negative_prompt**: 可選的負面提示詞（例如：「低品質，模糊」）
+    
+    回傳 base64 編碼的圖片，前端可直接顯示預覽。
+    使用者確認後，可將此圖片用於建立廣告。
+    """
+    try:
+        result = ImageGenerationService.generate_image(
+            prompt=request.prompt,
+            model=request.model,
+            negative_prompt=request.negative_prompt
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
+        return {
+            "success": True,
+            "message": result["message"],
+            "data": {
+                "image_base64": result["data"]["image_base64"],
+                "size": result["data"]["size"],
+                "model": result["data"]["model"],
+                "prompt": result["data"]["prompt"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成圖片時發生錯誤: {str(e)}")
+
+
+@router.get("/models", summary="獲取可用的圖片生成模型", response_model=dict)
+async def get_available_models():
+    """
+    獲取可用的 AI 圖片生成模型列表
+    
+    返回所有支援的模型及其描述
+    """
+    try:
+        result = ImageGenerationService.get_available_models()
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"獲取模型列表時發生錯誤: {str(e)}")
+
 
 @router.post("/", summary="建立新廣告", response_model=dict)
 async def create_advertisement(
