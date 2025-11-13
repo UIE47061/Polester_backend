@@ -150,12 +150,9 @@ async def get_advertisements(
 @router.get("/active", summary="獲取有效廣告", response_model=dict)
 async def get_active_advertisements():
     """
-    獲取當前有效的廣告
+    獲取所有狀態為 active 的廣告
     
-    只返回符合以下條件的廣告：
-    - 狀態為 active
-    - 當前時間在投放時段內
-    - 曝光次數未達到目標投放桿數
+    只返回狀態為 active 的廣告
     """
     try:
         result = await AdvertisementService.get_active_advertisements()

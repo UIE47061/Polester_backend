@@ -193,34 +193,25 @@ class AdvertisementService:
     @staticmethod
     async def get_active_advertisements() -> dict:
         """
-        獲取當前有效的廣告（在投放時段內且未達到投放桿數）
+        獲取所有狀態為 active 的廣告
         
         Returns:
             有效廣告列表
         """
         try:
-            current_time = datetime.now().isoformat()
-            
             supabase = get_supabase_client()
             response = (
                 supabase.table("advertisements")
                 .select("*")
                 .eq("status", "active")
-                .lte("start_time", current_time)
-                .gte("end_time", current_time)
+                .order("created_at", desc=True)
                 .execute()
             )
             
-            # 篩選未達到投放桿數的廣告
-            active_ads = [
-                ad for ad in response.data 
-                if ad.get("current_impressions", 0) < ad.get("impression_count", 0)
-            ]
-            
             return {
                 "success": True,
-                "data": active_ads,
-                "count": len(active_ads),
+                "data": response.data,
+                "count": len(response.data),
                 "message": "獲取有效廣告成功"
             }
             
